@@ -7,15 +7,22 @@ import os
 import sys
 import re
 import json
+import glob
 import requests
 import argparse
 from datetime import datetime
 
 
 def read_md(filepath):
-    """读取 Markdown 文件"""
-    with open(filepath, "r", encoding="utf-8") as f:
-        return f.read()
+    """读取 Markdown 文件，支持通配符"""
+    files = glob.glob(filepath)
+    if not files:
+        print(f"ERROR: No file found matching: {filepath}")
+        sys.exit(1)
+    target = files[0]
+    print(f"Reading: {target}")
+    with open(target, "r", encoding="utf-8") as f:
+        return f.read(), target
 
 
 def md_table_to_html(table_str):
@@ -247,8 +254,8 @@ def main():
         print("ERROR: RESEND_API_KEY and EMAIL_TO must be set")
         sys.exit(1)
     
-    # Read markdown
-    md_content = read_md(args.md)
+    # Read markdown (returns content and actual file path)
+    md_content, actual_path = read_md(args.md)
     
     # Get date from filename or content
     today_str = datetime.now().strftime("%Y年%m月%d日")
@@ -257,7 +264,7 @@ def main():
     html = md_to_email_html(md_content, today_str)
     
     # Save HTML for preview
-    html_path = args.md.replace(".md", "_email.html")
+    html_path = actual_path.replace(".md", "_email.html")
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Email HTML saved: {html_path}")
