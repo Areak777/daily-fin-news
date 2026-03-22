@@ -2,17 +2,19 @@ name: 每日财经新闻盘前纪要
 
 on:
   schedule:
-    # 北京时间 8:50 = UTC 0:50
     - cron: '50 0 * * 1-5'
+  push:
+    paths:
+      - 'reports/*.md'
   workflow_dispatch:
     inputs:
-      force_date:
-        description: '指定日期 (YYYYMMDD)，留空则用当天'
+      report_file:
+        description: '报告文件名 (如 jiuyan_panzhen_20260320.md)'
         required: false
         default: ''
 
 jobs:
-  build:
+  send-email:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -27,17 +29,27 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 markdown
+        run: pip install requests
 
-      - name: Generate report markdown
-        env:
-          REPORT_DATE: ${{ github.event.inputs.force_date || '' }}
+      - name: Find latest report
+        id: find
         run: |
-          python generate_report.py "$REPORT_DATE"
+          REPORT_FILE="${{ github.event.inputs.report_file }}"
+          if [ -z "$REPORT_FILE" ]; then
+            # Find most recent .md file in reports/
+            REPORT_FILE=$(ls -t reports/*.md 2>/dev/null | head -1)
+            REPORT_FILE=$(basename "$REPORT_FILE" 2>/dev/null || echo "")
+          fi
+          if [ -z "$REPORT_FILE" ]; then
+            echo "No report found in reports/"
+            exit 1
+          fi
+          echo "file=$REPORT_FILE" >> $GITHUB_OUTPUT
+          echo "Found report: $REPORT_FILE"
 
       - name: Send email
         run: |
-          python send_news_email.py --md "output/report_*.md"
+          python send_news_email.py --md "reports/${{ steps.find.outputs.file }}"
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
@@ -48,5 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-report
-          path: output/
+          path: |
+            reports/
+            output/
           retention-days: 30
