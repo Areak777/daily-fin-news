@@ -1,0 +1,52 @@
+name: 每日财经新闻盘前纪要
+
+on:
+  schedule:
+    # 北京时间 8:50 = UTC 0:50
+    - cron: '50 0 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force_date:
+        description: '指定日期 (YYYYMMDD)，留空则用当天'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 markdown
+
+      - name: Generate report markdown
+        env:
+          REPORT_DATE: ${{ github.event.inputs.force_date || '' }}
+        run: |
+          python generate_report.py "$REPORT_DATE"
+
+      - name: Send email
+        run: |
+          python send_news_email.py --md "output/report_*.md"
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-report
+          path: output/
+          retention-days: 30
